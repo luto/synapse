@@ -23,6 +23,8 @@ from mock import Mock
 
 import pkg_resources
 
+from twisted.internet import defer
+
 import synapse.rest.admin
 from synapse.api.constants import LoginType
 from synapse.api.errors import Codes
@@ -313,7 +315,7 @@ class RegisterRestServletTestCase(unittest.HomeserverTestCase):
             "account_threepid_delegates": {
                 "email": "https://id_server",
                 "msisdn": "https://id_server",
-                "adding_account_threepid_only": True,
+                "delegate_for": ["adding_threepid"],
             },
             "public_baseurl": "https://test_server",
         }
@@ -323,25 +325,12 @@ class RegisterRestServletTestCase(unittest.HomeserverTestCase):
 
         user_id = self.register_user("kermit", "monkey")
 
-        self.delegated_attempts = 0
-        self.local_attempts = 0
-
-        async def requestEmailToken(
-            id_server, email, client_secret, send_attempt, next_link=None,
-        ):
-            self.delegated_attempts += 1
-            return {"sid": 1234}
-
-        async def send_threepid_validation(
-            email_address, client_secret, send_attempt, send_email_func, next_link=None,
-        ):
-            self.local_attempts += 1
-            return 1234
-
         identity_handler = self.hs.get_handlers().identity_handler
-        identity_handler.requestEmailToken = Mock(side_effect=requestEmailToken)
+        identity_handler.requestEmailToken = Mock(
+            return_value=defer.succeed({"sid": 1234})
+        )
         identity_handler.send_threepid_validation = Mock(
-            side_effect=send_threepid_validation,
+            return_value=defer.succeed(1234)
         )
 
         body = {"client_secret": "somesecret", "email": email, "send_attempt": 0}
@@ -351,8 +340,8 @@ class RegisterRestServletTestCase(unittest.HomeserverTestCase):
         self.render(request)
 
         self.assertEqual(channel.code, 200, channel.json_body)
-        self.assertEqual(self.delegated_attempts, 1)
-        self.assertEqual(self.local_attempts, 0)
+        self.assertEqual(len(identity_handler.requestEmailToken.mock_calls), 1)
+        self.assertEqual(len(identity_handler.send_threepid_validation.mock_calls), 0)
 
         # Add a threepid
         self.get_success(
@@ -372,8 +361,8 @@ class RegisterRestServletTestCase(unittest.HomeserverTestCase):
         self.render(request)
 
         self.assertEqual(channel.code, 200, channel.json_body)
-        self.assertEqual(self.delegated_attempts, 1)
-        self.assertEqual(self.local_attempts, 1)
+        self.assertEqual(len(identity_handler.requestEmailToken.mock_calls), 1)
+        self.assertEqual(len(identity_handler.send_threepid_validation.mock_calls), 1)
 
 
 class AccountValidityTestCase(unittest.HomeserverTestCase):
