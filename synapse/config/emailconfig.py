@@ -25,6 +25,8 @@ from typing import Optional
 
 import pkg_resources
 
+from synapse.config.registration import AccountThreepidDelegateFor
+
 from ._base import Config, ConfigError
 
 MISSING_PASSWORD_RESET_CONFIG_ERROR = """\
@@ -152,21 +154,30 @@ class EmailConfig(Config):
             jinja2
             bleach
 
-        if (
-            self.threepid_behaviour_email == ThreepidBehaviour.LOCAL
-            or self.only_delegate_adding_threepid
+        if self.threepid_behaviour_email == ThreepidBehaviour.LOCAL or (
+            self.threepid_behaviour_email == ThreepidBehaviour.REMOTE
+            and AccountThreepidDelegateFor.PASSWORD_RESET
+            not in self.account_threepid_delegates_delegate_for
         ):
-            # If delegation is only configured for registration, we still have to handle
-            # password resets, so we still need password reset templates.
             self.email_password_reset_template_html = email_config.get(
                 "password_reset_template_html", "password_reset.html"
             )
             self.email_password_reset_template_text = email_config.get(
                 "password_reset_template_text", "password_reset.txt"
             )
-
             self.email_password_reset_template_failure_html = email_config.get(
                 "password_reset_template_failure_html", "password_reset_failure.html"
+            )
+        if self.threepid_behaviour_email == ThreepidBehaviour.LOCAL or (
+            self.threepid_behaviour_email == ThreepidBehaviour.REMOTE
+            and AccountThreepidDelegateFor.ADDING_THREEPID
+            not in self.account_threepid_delegates_delegate_for
+        ):
+            self.email_add_threepid_template_html = email_config.get(
+                "add_threepid_template_html", "add_threepid.html"
+            )
+            self.email_add_threepid_template_text = email_config.get(
+                "add_threepid_template_text", "add_threepid.txt"
             )
 
         if self.threepid_behaviour_email == ThreepidBehaviour.LOCAL:
@@ -192,13 +203,6 @@ class EmailConfig(Config):
             self.email_registration_template_text = email_config.get(
                 "registration_template_text", "registration.txt"
             )
-            self.email_add_threepid_template_html = email_config.get(
-                "add_threepid_template_html", "add_threepid.html"
-            )
-            self.email_add_threepid_template_text = email_config.get(
-                "add_threepid_template_text", "add_threepid.txt"
-            )
-
             self.email_registration_template_failure_html = email_config.get(
                 "registration_template_failure_html", "registration_failure.html"
             )

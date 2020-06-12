@@ -21,6 +21,7 @@ from six.moves import http_client
 from synapse.api.constants import LoginType
 from synapse.api.errors import Codes, SynapseError, ThreepidValidationError
 from synapse.config.emailconfig import ThreepidBehaviour
+from synapse.config.registration import AccountThreepidDelegateFor
 from synapse.http.server import finish_request
 from synapse.http.servlet import (
     RestServlet,
@@ -48,11 +49,13 @@ class EmailPasswordRequestTokenRestServlet(RestServlet):
         self.config = hs.config
         self.identity_handler = hs.get_handlers().identity_handler
 
-        self.only_delegate_registration = hs.config.only_delegate_adding_threepid
+        # Which endpoints to possibly delegate 3pid verification to an external service for
+        self._delegate_for = hs.config.account_threepid_delegates_delegate_for
 
-        if (
-            self.config.threepid_behaviour_email == ThreepidBehaviour.LOCAL
-            or self.only_delegate_registration
+        # Only load email resources if we'll be sending them
+        if self.config.threepid_behaviour_email == ThreepidBehaviour.LOCAL or (
+            self.config.threepid_behaviour_email == ThreepidBehaviour.REMOTE
+            and AccountThreepidDelegateFor.PASSWORD_RESET not in self._delegate_for
         ):
             template_html, template_text = load_jinja2_templates(
                 self.config.email_template_dir,
@@ -114,7 +117,7 @@ class EmailPasswordRequestTokenRestServlet(RestServlet):
 
         if (
             self.config.threepid_behaviour_email == ThreepidBehaviour.REMOTE
-            and not self.only_delegate_registration
+            and AccountThreepidDelegateFor.PASSWORD_RESET in self._delegate_for
         ):
             assert self.hs.config.account_threepid_delegate_email
 
@@ -160,9 +163,12 @@ class PasswordResetSubmitTokenServlet(RestServlet):
         self.config = hs.config
         self.clock = hs.get_clock()
         self.store = hs.get_datastore()
-        if (
-            self.config.threepid_behaviour_email == ThreepidBehaviour.LOCAL
-            or self.config.only_delegate_adding_threepid
+
+        # Only load email resources if we'll be sending them
+        if self.config.threepid_behaviour_email == ThreepidBehaviour.LOCAL or (
+            self.config.threepid_behaviour_email == ThreepidBehaviour.REMOTE
+            and AccountThreepidDelegateFor.PASSWORD_RESET
+            not in hs.config.account_threepid_delegates_delegate_for
         ):
             (self.failure_email_template,) = load_jinja2_templates(
                 self.config.email_template_dir,
