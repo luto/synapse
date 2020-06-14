@@ -524,8 +524,16 @@ def transport_kernel_read_buffer_size(protocol, read=True):
             op = SIOCINQ
         else:
             op = SIOCOUTQ
-        size = struct.unpack("I", fcntl.ioctl(fileno, op, b"\0\0\0\0"))[0]
-        return size
+        try:
+            size = struct.unpack("I", fcntl.ioctl(fileno, op, b"\0\0\0\0"))[0]
+            return size
+        except OSError as ex:
+            if ex.errno == 25:
+                # "Inappropriate ioctl for device"
+                # some OSes (e.g. FreeBSD) do not support this
+                logger.warning("cannot get socket buffer size: unsupported OS")
+            else:
+                raise
     return 0
 
 
