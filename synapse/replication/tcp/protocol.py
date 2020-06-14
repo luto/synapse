@@ -50,6 +50,7 @@ import abc
 import fcntl
 import logging
 import struct
+import termios
 from typing import TYPE_CHECKING, List
 
 from prometheus_client import Counter
@@ -106,6 +107,14 @@ logger = logging.getLogger(__name__)
 PING_TIME = 5000
 PING_TIMEOUT_MULTIPLIER = 5
 PING_TIMEOUT_MS = PING_TIME * PING_TIMEOUT_MULTIPLIER
+
+
+# (c) 2015 @martinohanlon, MIT License
+if hasattr(termios, 'TIOCINQ'):
+    TIOCINQ = termios.TIOCINQ
+else:
+    TIOCINQ = getattr(termios, 'FIONREAD', 0x541B)
+TIOCOUTQ = getattr(termios, 'TIOCOUTQ', 0x5411)
 
 
 class ConnectionStates(object):
@@ -515,15 +524,12 @@ transport_send_buffer = LaterGauge(
 
 
 def transport_kernel_read_buffer_size(protocol, read=True):
-    SIOCINQ = 0x541B
-    SIOCOUTQ = 0x5411
-
     if protocol.transport:
         fileno = protocol.transport.getHandle().fileno()
         if read:
-            op = SIOCINQ
+            op = TIOCINQ
         else:
-            op = SIOCOUTQ
+            op = TIOCOUTQ
         size = struct.unpack("I", fcntl.ioctl(fileno, op, b"\0\0\0\0"))[0]
         return size
     return 0
